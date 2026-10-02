@@ -15,7 +15,7 @@ Adopted controls get implemented in IaC / the golden image and logged in
 > currently **portal/SP-gated** (G-020). Phases 4–5 (F/G) licensed, not started; Phase 6 (recording) not started.
 > Lab on **E5 trial**. Resume point in [../status.md](../status.md). See [../test-results-and-findings.md](../test-results-and-findings.md).
 
-**Test bed:** `sh0-avd-cust0` is the pilot host; `steven@virtuallyhacked.com` the test user. Prefer
+**Test bed:** `sh0-avd-cust0` is the pilot host; `admin@contoso.com` the test user. Prefer
 **audit/report-only modes** first to avoid lock-out. All Phase 1–2 controls are reversible config.
 
 ## Phase overview

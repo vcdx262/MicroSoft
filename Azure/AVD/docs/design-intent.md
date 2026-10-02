@@ -5,7 +5,7 @@ user before proceeding.
 
 ## Business context
 
-- Owner: Steven (steven@virtuallyhacked.com), runs a **security consulting firm**.
+- Owner: Steven Slocum, runs a **security consulting firm**.
 - Headcount: **1–3 consultants now, scaling to ~50**.
 - Purpose: give consultants a hardened, controlled **Azure Virtual Desktop (AVD)** workspace
   from which to do client/security work, with the firm's security posture enforced centrally.
