@@ -21,7 +21,7 @@
     Get-ComputerInfo.ps1 -Computer (Get-Content C:\ListOfComputers.txt)
 .NOTES
     Author: Steven Slocum
-    Email: steven@virtuallyhacked.com
+    Author: Steven Slocum — VCDX #262
     Last Updated: 20161205
     Last Updated By: S. Slocum
     Last Update Notes:

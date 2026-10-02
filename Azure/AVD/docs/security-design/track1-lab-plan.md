@@ -7,7 +7,7 @@
 ## Objective
 Test security controls (2FA/Conditional Access, Tenant Restrictions v2, Defender for Endpoint,
 Purview DLP + labels, secure email) against **isolated test users + a test host** in the **existing**
-`virtuallyhacked.com` tenant / "Steven" subscription, **without any risk to** `steven@virtuallyhacked.com`,
+`contoso.com` tenant / owner subscription, **without any risk to** the owner account,
 the production AVD (`cust01` / `sh0`), or production policies.
 
 ## Isolation principle (the invariant)
@@ -28,7 +28,7 @@ the production AVD (`cust01` / `sh0`), or production policies.
 ### Identity (Entra — scoped)
 | Object | Name | Notes |
 |---|---|---|
-| Test users (cloud-only) | `lab1@virtuallyhacked.com`, `lab2@virtuallyhacked.com` | **Not** steven; new accounts |
+| Test users (cloud-only) | `lab1@contoso.com`, `lab2@contoso.com` | **Not** steven; new accounts |
 | Security group | `grp-avd-lab-users` | members: lab1, lab2 — the scope target for ALL lab policies |
 | Licenses | 2 × M365 E5 | assigned to lab1/lab2 only |
 
