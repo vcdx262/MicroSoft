@@ -1,0 +1,21 @@
+{
+  "name": "AVD - Cloud Kerberos (UNTESTED - do not assign)",
+  "description": "UNTESTED control (build-only per Steven 2026-06-22). Kerberos > Cloud Kerberos Ticket Retrieval Enabled = Enabled. Required for Azure Files Entra Kerberos auth from cloud-only identities. Validate in lab before assigning. Created unassigned.",
+  "platforms": "windows10",
+  "technologies": "mdm",
+  "roleScopeTagIds": [ "0" ],
+  "settings": [
+    {
+      "@odata.type": "#microsoft.graph.deviceManagementConfigurationSetting",
+      "settingInstance": {
+        "@odata.type": "#microsoft.graph.deviceManagementConfigurationChoiceSettingInstance",
+        "settingDefinitionId": "device_vendor_msft_policy_config_kerberos_cloudkerberosticketretrievalenabled",
+        "choiceSettingValue": {
+          "@odata.type": "#microsoft.graph.deviceManagementConfigurationChoiceSettingValue",
+          "value": "device_vendor_msft_policy_config_kerberos_cloudkerberosticketretrievalenabled_1",
+          "children": []
+        }
+      }
+    }
+  ]
+}
