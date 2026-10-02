@@ -1,0 +1,17 @@
+{
+  "_comment": "Graph PATCH body for the TRv2 server-side cloud policy. Blocks ALL external accounts and external apps by default. Target: PATCH https://graph.microsoft.com/beta/policies/crossTenantAccessPolicy/default . Creating/patching this generates the Policy ID (GUID) that the device profile (avd-tenant-restrictions-v2.json) references. UNTESTED / build-only per Steven 2026-06-22 - do not apply until reviewed.",
+  "tenantRestrictions": {
+    "usersAndGroups": {
+      "accessType": "blocked",
+      "targets": [
+        { "target": "AllUsers", "targetType": "user" }
+      ]
+    },
+    "applications": {
+      "accessType": "blocked",
+      "targets": [
+        { "target": "AllApplications", "targetType": "application" }
+      ]
+    }
+  }
+}

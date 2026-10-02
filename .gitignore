@@ -1,0 +1,29 @@
+# Secrets / local config
+*.env
+.env
+.env.*
+*.pem
+*.key
+*.pfx
+*.ppk
+id_rsa*
+*.publishsettings
+azureProfile.json
+# Terraform / Bicep local
+.terraform/
+*.tfstate*
+# Local script inputs/outputs
+*.csv
+!*example*.csv
+AD-Inventory/
+Azure-Inventory/
+# Agent/session state
+.claude/
+AGENTS.md
+CLAUDE.md
+# Runtime artifacts
+*.log
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db

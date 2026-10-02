@@ -1,0 +1,1322 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "languageVersion": "2.0",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.41.2.15936",
+      "templateHash": "9350672707629094238"
+    }
+  },
+  "parameters": {
+    "customerName": {
+      "type": "string",
+      "metadata": {
+        "description": "Short customer identifier, e.g. cust01. Used in all resource names."
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "centralus",
+      "metadata": {
+        "description": "Azure region for all resources in this stack."
+      }
+    },
+    "logAnalyticsWorkspaceId": {
+      "type": "string",
+      "metadata": {
+        "description": "Resource ID of the shared Log Analytics workspace (from the platform stack)."
+      }
+    },
+    "vnetAddressSpace": {
+      "type": "string",
+      "defaultValue": "10.10.0.0/16",
+      "metadata": {
+        "description": "vNet address space. Intentionally reusable across customers (isolated vNets)."
+      }
+    },
+    "avdSubnetPrefix": {
+      "type": "string",
+      "defaultValue": "10.10.1.0/24",
+      "metadata": {
+        "description": "Subnet for session hosts + Kali."
+      }
+    },
+    "peSubnetPrefix": {
+      "type": "string",
+      "defaultValue": "10.10.2.0/24",
+      "metadata": {
+        "description": "Subnet for the Azure Files private endpoint."
+      }
+    },
+    "userGroupObjectId": {
+      "type": "string",
+      "metadata": {
+        "description": "Object ID of the Entra security group containing the consultants for this customer."
+      }
+    },
+    "adminGroupObjectId": {
+      "type": "string",
+      "metadata": {
+        "description": "Object ID of the Entra security group containing AVD admins (VM admin login)."
+      }
+    },
+    "enableSso": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Enable Entra SSO. true = smooth M365 sign-in but needs a one-time tenant step (enable-avd-sso.ps1); false = zero tenant changes."
+      }
+    },
+    "sessionHostCount": {
+      "type": "int",
+      "defaultValue": 1,
+      "minValue": 1,
+      "maxValue": 50,
+      "metadata": {
+        "description": "Number of personal Windows session hosts (one per consultant)."
+      }
+    },
+    "sessionHostVmSize": {
+      "type": "string",
+      "defaultValue": "Standard_D4s_v5",
+      "metadata": {
+        "description": "VM size for Windows session hosts."
+      }
+    },
+    "kaliVmSize": {
+      "type": "string",
+      "defaultValue": "Standard_D2s_v5",
+      "metadata": {
+        "description": "VM size for the Kali VM."
+      }
+    },
+    "sessionHostAdminUsername": {
+      "type": "string",
+      "defaultValue": "avdadmin",
+      "metadata": {
+        "description": "Local administrator username for session hosts."
+      }
+    },
+    "sessionHostAdminPassword": {
+      "type": "securestring",
+      "metadata": {
+        "description": "Local administrator password for session hosts."
+      }
+    },
+    "kaliAdminUsername": {
+      "type": "string",
+      "defaultValue": "kaliadmin",
+      "metadata": {
+        "description": "Admin username for the Kali VM. Azure disallows \"admin\"/\"root\"/etc. (gotcha G-012)."
+      }
+    },
+    "kaliAdminPassword": {
+      "type": "securestring",
+      "metadata": {
+        "description": "Password for the Kali VM admin user (SSH password auth — MVP)."
+      }
+    },
+    "deployKali": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Deploy the Kali VM. Set false for lab / identity-only stacks."
+      }
+    },
+    "enableIntune": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Enrol session hosts in Intune (config-delivery plane, ADR 0008). Needs MDM scope + Intune licensing."
+      }
+    },
+    "hostPoolTokenExpiration": {
+      "type": "string",
+      "defaultValue": "[dateTimeAdd(utcNow(), 'PT24H')]",
+      "metadata": {
+        "description": "Host pool registration token expiry (ISO 8601). Defaults to deployment time + 24h."
+      }
+    }
+  },
+  "variables": {
+    "prefix": "[format('avd-{0}', parameters('customerName'))]",
+    "storageAccountName": "[toLower(format('saavd{0}{1}', replace(parameters('customerName'), '-', ''), uniqueString(resourceGroup().id, 'fslogixv2')))]",
+    "profilesShareName": "profiles"
+  },
+  "resources": {
+    "network": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "network",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "prefix": {
+            "value": "[variables('prefix')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "vnetAddressSpace": {
+            "value": "[parameters('vnetAddressSpace')]"
+          },
+          "avdSubnetPrefix": {
+            "value": "[parameters('avdSubnetPrefix')]"
+          },
+          "peSubnetPrefix": {
+            "value": "[parameters('peSubnetPrefix')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "14272812430461773273"
+            }
+          },
+          "parameters": {
+            "prefix": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource name prefix, e.g. avd-cust01."
+              }
+            },
+            "location": {
+              "type": "string"
+            },
+            "vnetAddressSpace": {
+              "type": "string"
+            },
+            "avdSubnetPrefix": {
+              "type": "string"
+            },
+            "peSubnetPrefix": {
+              "type": "string"
+            }
+          },
+          "variables": {
+            "nsgName": "[format('nsg-{0}-avd', parameters('prefix'))]",
+            "natGwName": "[format('natgw-{0}', parameters('prefix'))]",
+            "natPipName": "[format('pip-{0}-natgw', parameters('prefix'))]",
+            "vnetName": "[format('vnet-{0}', parameters('prefix'))]"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Network/networkSecurityGroups",
+              "apiVersion": "2023-11-01",
+              "name": "[variables('nsgName')]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "securityRules": [
+                  {
+                    "name": "Allow-Intra-Vnet-Inbound",
+                    "properties": {
+                      "priority": 100,
+                      "direction": "Inbound",
+                      "access": "Allow",
+                      "protocol": "*",
+                      "sourceAddressPrefix": "VirtualNetwork",
+                      "sourcePortRange": "*",
+                      "destinationAddressPrefix": "VirtualNetwork",
+                      "destinationPortRange": "*"
+                    }
+                  },
+                  {
+                    "name": "Deny-All-Inbound-From-Internet",
+                    "properties": {
+                      "priority": 4096,
+                      "direction": "Inbound",
+                      "access": "Deny",
+                      "protocol": "*",
+                      "sourceAddressPrefix": "Internet",
+                      "sourcePortRange": "*",
+                      "destinationAddressPrefix": "*",
+                      "destinationPortRange": "*"
+                    }
+                  },
+                  {
+                    "name": "Allow-AVD-ServiceTag-Outbound",
+                    "properties": {
+                      "priority": 100,
+                      "direction": "Outbound",
+                      "access": "Allow",
+                      "protocol": "Tcp",
+                      "sourceAddressPrefix": "VirtualNetwork",
+                      "sourcePortRange": "*",
+                      "destinationAddressPrefix": "WindowsVirtualDesktop",
+                      "destinationPortRange": "443"
+                    }
+                  },
+                  {
+                    "name": "Allow-AzureCloud-443-Outbound",
+                    "properties": {
+                      "priority": 110,
+                      "direction": "Outbound",
+                      "access": "Allow",
+                      "protocol": "Tcp",
+                      "sourceAddressPrefix": "VirtualNetwork",
+                      "sourcePortRange": "*",
+                      "destinationAddressPrefix": "AzureCloud",
+                      "destinationPortRange": "443"
+                    }
+                  },
+                  {
+                    "name": "Allow-Storage-SMB-Outbound",
+                    "properties": {
+                      "priority": 115,
+                      "direction": "Outbound",
+                      "access": "Allow",
+                      "protocol": "Tcp",
+                      "sourceAddressPrefix": "VirtualNetwork",
+                      "sourcePortRange": "*",
+                      "destinationAddressPrefix": "Storage.CentralUS",
+                      "destinationPortRange": "445"
+                    }
+                  },
+                  {
+                    "name": "Allow-Intra-Vnet-Outbound",
+                    "properties": {
+                      "priority": 120,
+                      "direction": "Outbound",
+                      "access": "Allow",
+                      "protocol": "*",
+                      "sourceAddressPrefix": "VirtualNetwork",
+                      "sourcePortRange": "*",
+                      "destinationAddressPrefix": "VirtualNetwork",
+                      "destinationPortRange": "*"
+                    }
+                  },
+                  {
+                    "name": "Allow-Web-Outbound",
+                    "properties": {
+                      "priority": 200,
+                      "direction": "Outbound",
+                      "access": "Allow",
+                      "protocol": "Tcp",
+                      "sourceAddressPrefix": "VirtualNetwork",
+                      "sourcePortRange": "*",
+                      "destinationAddressPrefix": "Internet",
+                      "destinationPortRanges": [
+                        "80",
+                        "443"
+                      ]
+                    }
+                  },
+                  {
+                    "name": "Deny-All-Other-Outbound-Internet",
+                    "properties": {
+                      "priority": 4096,
+                      "direction": "Outbound",
+                      "access": "Deny",
+                      "protocol": "*",
+                      "sourceAddressPrefix": "*",
+                      "sourcePortRange": "*",
+                      "destinationAddressPrefix": "Internet",
+                      "destinationPortRange": "*"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "type": "Microsoft.Network/publicIPAddresses",
+              "apiVersion": "2023-11-01",
+              "name": "[variables('natPipName')]",
+              "location": "[parameters('location')]",
+              "sku": {
+                "name": "Standard"
+              },
+              "properties": {
+                "publicIPAllocationMethod": "Static"
+              }
+            },
+            {
+              "type": "Microsoft.Network/natGateways",
+              "apiVersion": "2023-11-01",
+              "name": "[variables('natGwName')]",
+              "location": "[parameters('location')]",
+              "sku": {
+                "name": "Standard"
+              },
+              "properties": {
+                "idleTimeoutInMinutes": 4,
+                "publicIpAddresses": [
+                  {
+                    "id": "[resourceId('Microsoft.Network/publicIPAddresses', variables('natPipName'))]"
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/publicIPAddresses', variables('natPipName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Network/virtualNetworks",
+              "apiVersion": "2023-11-01",
+              "name": "[variables('vnetName')]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "addressSpace": {
+                  "addressPrefixes": [
+                    "[parameters('vnetAddressSpace')]"
+                  ]
+                },
+                "subnets": [
+                  {
+                    "name": "snet-avd",
+                    "properties": {
+                      "addressPrefix": "[parameters('avdSubnetPrefix')]",
+                      "networkSecurityGroup": {
+                        "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName'))]"
+                      },
+                      "natGateway": {
+                        "id": "[resourceId('Microsoft.Network/natGateways', variables('natGwName'))]"
+                      },
+                      "serviceEndpoints": [
+                        {
+                          "service": "Microsoft.Storage"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "name": "snet-pe",
+                    "properties": {
+                      "addressPrefix": "[parameters('peSubnetPrefix')]",
+                      "privateEndpointNetworkPolicies": "Disabled"
+                    }
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/natGateways', variables('natGwName'))]",
+                "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "vnetId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Network/virtualNetworks', variables('vnetName'))]"
+            },
+            "avdSubnetId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Network/virtualNetworks', variables('vnetName')), '2023-11-01').subnets[0].id]"
+            },
+            "peSubnetId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Network/virtualNetworks', variables('vnetName')), '2023-11-01').subnets[1].id]"
+            }
+          }
+        }
+      }
+    },
+    "storage": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "storage",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "storageAccountName": {
+            "value": "[variables('storageAccountName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "profilesShareName": {
+            "value": "[variables('profilesShareName')]"
+          },
+          "avdSubnetId": {
+            "value": "[reference('network').outputs.avdSubnetId.value]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "5193669709320575420"
+            }
+          },
+          "parameters": {
+            "storageAccountName": {
+              "type": "string",
+              "metadata": {
+                "description": "Globally-unique storage account name."
+              }
+            },
+            "location": {
+              "type": "string"
+            },
+            "profilesShareName": {
+              "type": "string"
+            },
+            "avdSubnetId": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the AVD subnet (snet-avd) allowed through the storage firewall via its Microsoft.Storage service endpoint."
+              }
+            },
+            "storageSku": {
+              "type": "string",
+              "defaultValue": "PremiumV2_LRS",
+              "metadata": {
+                "description": "Provisioned v2 SSD. PremiumV2_LRS enables the 32 GiB floor + independent IOPS/throughput."
+              }
+            },
+            "profilesShareQuota": {
+              "type": "int",
+              "defaultValue": 32,
+              "minValue": 32,
+              "metadata": {
+                "description": "Provisioned size (GiB) for the FSLogix profiles share. v2 minimum is 32."
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Storage/storageAccounts",
+              "apiVersion": "2024-01-01",
+              "name": "[parameters('storageAccountName')]",
+              "location": "[parameters('location')]",
+              "sku": {
+                "name": "[parameters('storageSku')]"
+              },
+              "kind": "FileStorage",
+              "properties": {
+                "minimumTlsVersion": "TLS1_2",
+                "allowBlobPublicAccess": false,
+                "allowSharedKeyAccess": true,
+                "publicNetworkAccess": "Enabled",
+                "supportsHttpsTrafficOnly": true,
+                "networkAcls": {
+                  "defaultAction": "Deny",
+                  "bypass": "AzureServices",
+                  "virtualNetworkRules": [
+                    {
+                      "id": "[parameters('avdSubnetId')]",
+                      "action": "Allow"
+                    }
+                  ]
+                },
+                "encryption": {
+                  "keySource": "Microsoft.Storage",
+                  "services": {
+                    "file": {
+                      "enabled": true,
+                      "keyType": "Account"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts/fileServices",
+              "apiVersion": "2024-01-01",
+              "name": "[format('{0}/{1}', parameters('storageAccountName'), 'default')]",
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts/fileServices/shares",
+              "apiVersion": "2024-01-01",
+              "name": "[format('{0}/{1}/{2}', parameters('storageAccountName'), 'default', parameters('profilesShareName'))]",
+              "properties": {
+                "shareQuota": "[parameters('profilesShareQuota')]",
+                "enabledProtocols": "SMB"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts/fileServices', parameters('storageAccountName'), 'default')]"
+              ]
+            }
+          ],
+          "outputs": {
+            "storageAccountId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
+            },
+            "storageAccountName": {
+              "type": "string",
+              "value": "[parameters('storageAccountName')]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "network"
+      ]
+    },
+    "avd": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "avd-controlplane",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "prefix": {
+            "value": "[variables('prefix')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "logAnalyticsWorkspaceId": {
+            "value": "[parameters('logAnalyticsWorkspaceId')]"
+          },
+          "tokenExpiration": {
+            "value": "[parameters('hostPoolTokenExpiration')]"
+          },
+          "enableSso": {
+            "value": "[parameters('enableSso')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "languageVersion": "2.0",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "2318253960059198624"
+            }
+          },
+          "parameters": {
+            "prefix": {
+              "type": "string"
+            },
+            "location": {
+              "type": "string"
+            },
+            "logAnalyticsWorkspaceId": {
+              "type": "string"
+            },
+            "tokenExpiration": {
+              "type": "string",
+              "metadata": {
+                "description": "Registration token expiry timestamp (ISO 8601)."
+              }
+            },
+            "enableSso": {
+              "type": "bool",
+              "defaultValue": true,
+              "metadata": {
+                "description": "Enable Entra single sign-on. true requires a one-time tenant step (scripts/enable-avd-sso.ps1); false = zero tenant changes but users re-enter their password at the session host / M365 apps."
+              }
+            }
+          },
+          "variables": {
+            "hostPoolName": "[format('hp-{0}', parameters('prefix'))]",
+            "appGroupName": "[format('dag-{0}-desktop', parameters('prefix'))]",
+            "workspaceName": "[format('ws-{0}', parameters('prefix'))]",
+            "ssoRdp": "[if(parameters('enableSso'), 'enablerdsaadauth:i:1;', '')]",
+            "customRdpProperty": "[format('{0}drivestoredirect:s:;redirectclipboard:i:0;audiocapturemode:i:0;redirectprinters:i:0;usbdevicestoredirect:s:;', variables('ssoRdp'))]"
+          },
+          "resources": {
+            "hostPool": {
+              "type": "Microsoft.DesktopVirtualization/hostPools",
+              "apiVersion": "2024-04-03",
+              "name": "[variables('hostPoolName')]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "hostPoolType": "Personal",
+                "personalDesktopAssignmentType": "Automatic",
+                "loadBalancerType": "Persistent",
+                "preferredAppGroupType": "Desktop",
+                "maxSessionLimit": 1,
+                "startVMOnConnect": true,
+                "validationEnvironment": false,
+                "customRdpProperty": "[variables('customRdpProperty')]",
+                "registrationInfo": {
+                  "expirationTime": "[parameters('tokenExpiration')]",
+                  "registrationTokenOperation": "Update"
+                }
+              }
+            },
+            "appGroup": {
+              "type": "Microsoft.DesktopVirtualization/applicationGroups",
+              "apiVersion": "2024-04-03",
+              "name": "[variables('appGroupName')]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "hostPoolArmPath": "[resourceId('Microsoft.DesktopVirtualization/hostPools', variables('hostPoolName'))]",
+                "applicationGroupType": "Desktop",
+                "friendlyName": "Desktop"
+              },
+              "dependsOn": [
+                "hostPool"
+              ]
+            },
+            "workspace": {
+              "type": "Microsoft.DesktopVirtualization/workspaces",
+              "apiVersion": "2024-04-03",
+              "name": "[variables('workspaceName')]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "friendlyName": "[parameters('prefix')]",
+                "applicationGroupReferences": [
+                  "[resourceId('Microsoft.DesktopVirtualization/applicationGroups', variables('appGroupName'))]"
+                ]
+              },
+              "dependsOn": [
+                "appGroup"
+              ]
+            },
+            "hostPoolDiag": {
+              "type": "Microsoft.Insights/diagnosticSettings",
+              "apiVersion": "2021-05-01-preview",
+              "scope": "[resourceId('Microsoft.DesktopVirtualization/hostPools', variables('hostPoolName'))]",
+              "name": "diag",
+              "properties": {
+                "workspaceId": "[parameters('logAnalyticsWorkspaceId')]",
+                "logs": [
+                  {
+                    "categoryGroup": "allLogs",
+                    "enabled": true
+                  }
+                ]
+              },
+              "dependsOn": [
+                "hostPool"
+              ]
+            },
+            "workspaceDiag": {
+              "type": "Microsoft.Insights/diagnosticSettings",
+              "apiVersion": "2021-05-01-preview",
+              "scope": "[resourceId('Microsoft.DesktopVirtualization/workspaces', variables('workspaceName'))]",
+              "name": "diag",
+              "properties": {
+                "workspaceId": "[parameters('logAnalyticsWorkspaceId')]",
+                "logs": [
+                  {
+                    "categoryGroup": "allLogs",
+                    "enabled": true
+                  }
+                ]
+              },
+              "dependsOn": [
+                "workspace"
+              ]
+            }
+          },
+          "outputs": {
+            "hostPoolName": {
+              "type": "string",
+              "value": "[variables('hostPoolName')]"
+            },
+            "appGroupName": {
+              "type": "string",
+              "value": "[variables('appGroupName')]"
+            },
+            "workspaceName": {
+              "type": "string",
+              "value": "[variables('workspaceName')]"
+            },
+            "registrationToken": {
+              "type": "securestring",
+              "value": "[listRegistrationTokens('hostPool', '2024-04-03').value[0].token]"
+            }
+          }
+        }
+      }
+    },
+    "sessionHosts": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "session-hosts",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "prefix": {
+            "value": "[variables('prefix')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "count": {
+            "value": "[parameters('sessionHostCount')]"
+          },
+          "vmSize": {
+            "value": "[parameters('sessionHostVmSize')]"
+          },
+          "subnetId": {
+            "value": "[reference('network').outputs.avdSubnetId.value]"
+          },
+          "adminUsername": {
+            "value": "[parameters('sessionHostAdminUsername')]"
+          },
+          "adminPassword": {
+            "value": "[parameters('sessionHostAdminPassword')]"
+          },
+          "registrationToken": {
+            "value": "[listOutputsWithSecureValues('avd', '2025-04-01').registrationToken]"
+          },
+          "storageAccountName": {
+            "value": "[variables('storageAccountName')]"
+          },
+          "profilesShareName": {
+            "value": "[variables('profilesShareName')]"
+          },
+          "enableIntune": {
+            "value": "[parameters('enableIntune')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "1042631404000976883"
+            }
+          },
+          "parameters": {
+            "prefix": {
+              "type": "string"
+            },
+            "location": {
+              "type": "string"
+            },
+            "count": {
+              "type": "int",
+              "minValue": 1
+            },
+            "vmSize": {
+              "type": "string"
+            },
+            "subnetId": {
+              "type": "string"
+            },
+            "adminUsername": {
+              "type": "string"
+            },
+            "adminPassword": {
+              "type": "securestring"
+            },
+            "registrationToken": {
+              "type": "securestring"
+            },
+            "storageAccountName": {
+              "type": "string"
+            },
+            "profilesShareName": {
+              "type": "string"
+            },
+            "enableIntune": {
+              "type": "bool",
+              "defaultValue": true,
+              "metadata": {
+                "description": "Enrol session hosts in Intune (MDM auto-enrollment) — config-delivery plane, ADR 0008."
+              }
+            },
+            "imageReference": {
+              "type": "object",
+              "defaultValue": {
+                "publisher": "MicrosoftWindowsDesktop",
+                "offer": "windows-11",
+                "sku": "win11-24h2-ent",
+                "version": "latest"
+              },
+              "metadata": {
+                "description": "Win11 multi-session-capable Enterprise marketplace image (single-session use)."
+              }
+            }
+          },
+          "variables": {
+            "profilesUnc": "[format('\\\\{0}.file.{1}\\{2}', parameters('storageAccountName'), environment().suffixes.storage, parameters('profilesShareName'))]",
+            "agentUrl": "https://go.microsoft.com/fwlink/?linkid=2310011",
+            "bootLoaderUrl": "https://go.microsoft.com/fwlink/?linkid=2311028",
+            "setupScript": "[format('$ErrorActionPreference=\"Continue\"\n$tmp=$env:TEMP\n$agent=\"$tmp\\RDAgent.msi\"\n$boot=\"$tmp\\RDBootLoader.msi\"\nInvoke-WebRequest -Uri \"{0}\" -OutFile $agent -UseBasicParsing\nInvoke-WebRequest -Uri \"{1}\" -OutFile $boot -UseBasicParsing\nStart-Process msiexec.exe -Wait -ArgumentList \"/i $agent /quiet /norestart REGISTRATIONTOKEN={2}\"\nStart-Process msiexec.exe -Wait -ArgumentList \"/i $boot /quiet /norestart\"\ntry {{ Invoke-WebRequest -Uri \"https://aka.ms/fslogix_download\" -OutFile \"$tmp\\fslogix.zip\" -UseBasicParsing; Expand-Archive \"$tmp\\fslogix.zip\" \"$tmp\\fslogix\" -Force; Start-Process (Get-ChildItem \"$tmp\\fslogix\\x64\\Release\\FSLogixAppsSetup.exe\").FullName -Wait -ArgumentList \"/install /quiet /norestart\" }} catch {{}}\n$k=\"HKLM:\\SOFTWARE\\FSLogix\\Profiles\"\nNew-Item -Path $k -Force | Out-Null\nNew-ItemProperty -Path $k -Name Enabled -Value 1 -PropertyType DWORD -Force | Out-Null\nNew-ItemProperty -Path $k -Name VHDLocations -Value \"{3}\" -PropertyType MultiString -Force | Out-Null\nNew-ItemProperty -Path $k -Name FlipFlopProfileDirectoryName -Value 1 -PropertyType DWORD -Force | Out-Null\nNew-ItemProperty -Path $k -Name VolumeType -Value \"VHDX\" -PropertyType String -Force | Out-Null\n$o=\"HKLM:\\SOFTWARE\\Policies\\Microsoft\\OneDrive\"\nNew-Item -Path $o -Force | Out-Null\nNew-ItemProperty -Path $o -Name DisableFileSyncNGSC -Value 1 -PropertyType DWORD -Force | Out-Null\nNew-ItemProperty -Path $o -Name DisablePersonalSync -Value 1 -PropertyType DWORD -Force | Out-Null\n$kerb=\"HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Lsa\\Kerberos\\Parameters\"\nNew-Item -Path $kerb -Force | Out-Null\nNew-ItemProperty -Path $kerb -Name CloudKerberosTicketRetrievalEnabled -Value 1 -PropertyType DWORD -Force | Out-Null\n$ts=\"HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\Terminal Services\"\nNew-Item -Path $ts -Force | Out-Null\nNew-ItemProperty -Path $ts -Name fEnableScreenCaptureProtect -Value 2 -PropertyType DWORD -Force | Out-Null\nNew-ItemProperty -Path $ts -Name fEnableWatermarking -Value 0 -PropertyType DWORD -Force | Out-Null\nNew-ItemProperty -Path $ts -Name WatermarkingHeightFactor -Value 180 -PropertyType DWORD -Force | Out-Null\nNew-ItemProperty -Path $ts -Name WatermarkingOpacity -Value 2000 -PropertyType DWORD -Force | Out-Null\nNew-ItemProperty -Path $ts -Name WatermarkingQrScale -Value 4 -PropertyType DWORD -Force | Out-Null\nNew-ItemProperty -Path $ts -Name WatermarkingWidthFactor -Value 320 -PropertyType DWORD -Force | Out-Null\n', variables('agentUrl'), variables('bootLoaderUrl'), parameters('registrationToken'), variables('profilesUnc'))]"
+          },
+          "resources": [
+            {
+              "copy": {
+                "name": "nic",
+                "count": "[length(range(0, parameters('count')))]"
+              },
+              "type": "Microsoft.Network/networkInterfaces",
+              "apiVersion": "2023-11-01",
+              "name": "[format('nic-{0}-sh{1}', parameters('prefix'), range(0, parameters('count'))[copyIndex()])]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "ipConfigurations": [
+                  {
+                    "name": "ipconfig1",
+                    "properties": {
+                      "subnet": {
+                        "id": "[parameters('subnetId')]"
+                      },
+                      "privateIPAllocationMethod": "Dynamic"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "copy": {
+                "name": "vm",
+                "count": "[length(range(0, parameters('count')))]"
+              },
+              "type": "Microsoft.Compute/virtualMachines",
+              "apiVersion": "2024-07-01",
+              "name": "[format('vm-{0}-sh{1}', parameters('prefix'), range(0, parameters('count'))[copyIndex()])]",
+              "location": "[parameters('location')]",
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "properties": {
+                "licenseType": "Windows_Client",
+                "hardwareProfile": {
+                  "vmSize": "[parameters('vmSize')]"
+                },
+                "osProfile": {
+                  "computerName": "[format('sh{0}-{1}', range(0, parameters('count'))[copyIndex()], take(parameters('prefix'), 9))]",
+                  "adminUsername": "[parameters('adminUsername')]",
+                  "adminPassword": "[parameters('adminPassword')]"
+                },
+                "storageProfile": {
+                  "imageReference": "[parameters('imageReference')]",
+                  "osDisk": {
+                    "createOption": "FromImage",
+                    "managedDisk": {
+                      "storageAccountType": "Premium_LRS"
+                    }
+                  }
+                },
+                "networkProfile": {
+                  "networkInterfaces": [
+                    {
+                      "id": "[resourceId('Microsoft.Network/networkInterfaces', format('nic-{0}-sh{1}', parameters('prefix'), range(0, parameters('count'))[range(0, parameters('count'))[copyIndex()]]))]"
+                    }
+                  ]
+                },
+                "securityProfile": {
+                  "securityType": "TrustedLaunch",
+                  "uefiSettings": {
+                    "secureBootEnabled": true,
+                    "vTpmEnabled": true
+                  }
+                },
+                "diagnosticsProfile": {
+                  "bootDiagnostics": {
+                    "enabled": true
+                  }
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/networkInterfaces', format('nic-{0}-sh{1}', parameters('prefix'), range(0, parameters('count'))[range(0, parameters('count'))[copyIndex()]]))]"
+              ]
+            },
+            {
+              "copy": {
+                "name": "aadJoin",
+                "count": "[length(range(0, parameters('count')))]"
+              },
+              "type": "Microsoft.Compute/virtualMachines/extensions",
+              "apiVersion": "2024-07-01",
+              "name": "[format('{0}/{1}', format('vm-{0}-sh{1}', parameters('prefix'), range(0, parameters('count'))[range(0, parameters('count'))[copyIndex()]]), 'AADLoginForWindows')]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "publisher": "Microsoft.Azure.ActiveDirectory",
+                "type": "AADLoginForWindows",
+                "typeHandlerVersion": "2.2",
+                "autoUpgradeMinorVersion": true,
+                "settings": "[if(parameters('enableIntune'), createObject('mdmId', '0000000a-0000-0000-c000-000000000000'), createObject())]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Compute/virtualMachines', format('vm-{0}-sh{1}', parameters('prefix'), range(0, parameters('count'))[range(0, parameters('count'))[copyIndex()]]))]"
+              ]
+            },
+            {
+              "copy": {
+                "name": "configHost",
+                "count": "[length(range(0, parameters('count')))]"
+              },
+              "type": "Microsoft.Compute/virtualMachines/extensions",
+              "apiVersion": "2024-07-01",
+              "name": "[format('{0}/{1}', format('vm-{0}-sh{1}', parameters('prefix'), range(0, parameters('count'))[range(0, parameters('count'))[copyIndex()]]), 'ConfigureSessionHost')]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "publisher": "Microsoft.Compute",
+                "type": "CustomScriptExtension",
+                "typeHandlerVersion": "1.10",
+                "autoUpgradeMinorVersion": true,
+                "protectedSettings": {
+                  "commandToExecute": "[format('powershell -ExecutionPolicy Unrestricted -NoProfile -Command \"$s=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String(''{0}'')); $p=Join-Path $env:TEMP ''sh-setup.ps1''; Set-Content -Path $p -Value $s -Encoding UTF8; powershell -ExecutionPolicy Unrestricted -NoProfile -File $p\"', base64(variables('setupScript')))]"
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Compute/virtualMachines/extensions', format('vm-{0}-sh{1}', parameters('prefix'), range(0, parameters('count'))[range(0, parameters('count'))[range(0, parameters('count'))[copyIndex()]]]), 'AADLoginForWindows')]",
+                "[resourceId('Microsoft.Compute/virtualMachines', format('vm-{0}-sh{1}', parameters('prefix'), range(0, parameters('count'))[range(0, parameters('count'))[copyIndex()]]))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "sessionHostIds": {
+              "type": "array",
+              "copy": {
+                "count": "[length(range(0, parameters('count')))]",
+                "input": "[resourceId('Microsoft.Compute/virtualMachines', format('vm-{0}-sh{1}', parameters('prefix'), range(0, parameters('count'))[range(0, parameters('count'))[copyIndex()]]))]"
+              }
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "avd",
+        "network"
+      ]
+    },
+    "kali": {
+      "condition": "[parameters('deployKali')]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "kali",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "prefix": {
+            "value": "[variables('prefix')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "vmSize": {
+            "value": "[parameters('kaliVmSize')]"
+          },
+          "subnetId": {
+            "value": "[reference('network').outputs.avdSubnetId.value]"
+          },
+          "adminUsername": {
+            "value": "[parameters('kaliAdminUsername')]"
+          },
+          "adminPassword": {
+            "value": "[parameters('kaliAdminPassword')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "17394680905833620013"
+            }
+          },
+          "parameters": {
+            "prefix": {
+              "type": "string"
+            },
+            "location": {
+              "type": "string"
+            },
+            "vmSize": {
+              "type": "string"
+            },
+            "subnetId": {
+              "type": "string"
+            },
+            "adminUsername": {
+              "type": "string",
+              "defaultValue": "kaliadmin",
+              "metadata": {
+                "description": "Kali admin username. NOTE: Azure disallows \"admin\"/\"root\"/etc. (see gotcha G-012)."
+              }
+            },
+            "adminPassword": {
+              "type": "securestring",
+              "metadata": {
+                "description": "Password for the Kali admin user (SSH password auth — MVP)."
+              }
+            },
+            "imageReference": {
+              "type": "object",
+              "defaultValue": {
+                "publisher": "kali-linux",
+                "offer": "kali",
+                "sku": "kali-2026-1",
+                "version": "latest"
+              },
+              "metadata": {
+                "description": "Kali marketplace image. Update sku to a current Kali release (see gotcha G-013)."
+              }
+            },
+            "autoShutdownTime": {
+              "type": "string",
+              "defaultValue": "1900",
+              "metadata": {
+                "description": "Auto-shutdown time (24h HHmm) and timezone for cost control."
+              }
+            },
+            "autoShutdownTimeZone": {
+              "type": "string",
+              "defaultValue": "Central Standard Time"
+            }
+          },
+          "variables": {
+            "vmName": "[format('vm-{0}-kali', parameters('prefix'))]"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Network/networkInterfaces",
+              "apiVersion": "2023-11-01",
+              "name": "[format('nic-{0}-kali', parameters('prefix'))]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "ipConfigurations": [
+                  {
+                    "name": "ipconfig1",
+                    "properties": {
+                      "subnet": {
+                        "id": "[parameters('subnetId')]"
+                      },
+                      "privateIPAllocationMethod": "Dynamic"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "type": "Microsoft.Compute/virtualMachines",
+              "apiVersion": "2024-07-01",
+              "name": "[variables('vmName')]",
+              "location": "[parameters('location')]",
+              "plan": {
+                "name": "[parameters('imageReference').sku]",
+                "product": "[parameters('imageReference').offer]",
+                "publisher": "[parameters('imageReference').publisher]"
+              },
+              "properties": {
+                "hardwareProfile": {
+                  "vmSize": "[parameters('vmSize')]"
+                },
+                "osProfile": {
+                  "computerName": "[format('kali-{0}', take(parameters('prefix'), 10))]",
+                  "adminUsername": "[parameters('adminUsername')]",
+                  "adminPassword": "[parameters('adminPassword')]",
+                  "linuxConfiguration": {
+                    "disablePasswordAuthentication": false
+                  }
+                },
+                "storageProfile": {
+                  "imageReference": "[parameters('imageReference')]",
+                  "osDisk": {
+                    "createOption": "FromImage",
+                    "managedDisk": {
+                      "storageAccountType": "Premium_LRS"
+                    }
+                  }
+                },
+                "networkProfile": {
+                  "networkInterfaces": [
+                    {
+                      "id": "[resourceId('Microsoft.Network/networkInterfaces', format('nic-{0}-kali', parameters('prefix')))]"
+                    }
+                  ]
+                },
+                "diagnosticsProfile": {
+                  "bootDiagnostics": {
+                    "enabled": true
+                  }
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/networkInterfaces', format('nic-{0}-kali', parameters('prefix')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.DevTestLab/schedules",
+              "apiVersion": "2018-09-15",
+              "name": "[format('shutdown-computevm-{0}', variables('vmName'))]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "status": "Enabled",
+                "taskType": "ComputeVmShutdownTask",
+                "dailyRecurrence": {
+                  "time": "[parameters('autoShutdownTime')]"
+                },
+                "timeZoneId": "[parameters('autoShutdownTimeZone')]",
+                "targetResourceId": "[resourceId('Microsoft.Compute/virtualMachines', variables('vmName'))]",
+                "notificationSettings": {
+                  "status": "Disabled"
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Compute/virtualMachines', variables('vmName'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "privateIp": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Network/networkInterfaces', format('nic-{0}-kali', parameters('prefix'))), '2023-11-01').ipConfigurations[0].properties.privateIPAddress]"
+            },
+            "vmName": {
+              "type": "string",
+              "value": "[variables('vmName')]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "network"
+      ]
+    },
+    "rbac": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "identity-rbac",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "userGroupObjectId": {
+            "value": "[parameters('userGroupObjectId')]"
+          },
+          "adminGroupObjectId": {
+            "value": "[parameters('adminGroupObjectId')]"
+          },
+          "desktopAppGroupName": {
+            "value": "[reference('avd').outputs.appGroupName.value]"
+          },
+          "storageAccountName": {
+            "value": "[variables('storageAccountName')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "273522527828015873"
+            }
+          },
+          "parameters": {
+            "userGroupObjectId": {
+              "type": "string"
+            },
+            "adminGroupObjectId": {
+              "type": "string"
+            },
+            "desktopAppGroupName": {
+              "type": "string"
+            },
+            "storageAccountName": {
+              "type": "string"
+            }
+          },
+          "variables": {
+            "roleVmUserLogin": "fb879df8-f326-4884-b1cf-06f3ad86be52",
+            "roleVmAdminLogin": "1c0163c0-47e6-4577-8991-ea5c82e286e4",
+            "roleDesktopVirtUser": "1d18fff3-a72a-46b5-b4a9-0b38a3cd7e63",
+            "roleSmbShareContributor": "0c867c2a-1d8c-454a-a3db-ab2ea1bdc8bb"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "name": "[guid(resourceGroup().id, parameters('userGroupObjectId'), variables('roleVmUserLogin'))]",
+              "properties": {
+                "principalId": "[parameters('userGroupObjectId')]",
+                "principalType": "Group",
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleVmUserLogin'))]"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "name": "[guid(resourceGroup().id, parameters('adminGroupObjectId'), variables('roleVmAdminLogin'))]",
+              "properties": {
+                "principalId": "[parameters('adminGroupObjectId')]",
+                "principalType": "Group",
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleVmAdminLogin'))]"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.DesktopVirtualization/applicationGroups', parameters('desktopAppGroupName'))]",
+              "name": "[guid(resourceId('Microsoft.DesktopVirtualization/applicationGroups', parameters('desktopAppGroupName')), parameters('userGroupObjectId'), variables('roleDesktopVirtUser'))]",
+              "properties": {
+                "principalId": "[parameters('userGroupObjectId')]",
+                "principalType": "Group",
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleDesktopVirtUser'))]"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]",
+              "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), parameters('userGroupObjectId'), variables('roleSmbShareContributor'))]",
+              "properties": {
+                "principalId": "[parameters('userGroupObjectId')]",
+                "principalType": "Group",
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleSmbShareContributor'))]"
+              }
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "avd",
+        "sessionHosts",
+        "storage"
+      ]
+    }
+  },
+  "outputs": {
+    "workspaceName": {
+      "type": "string",
+      "value": "[reference('avd').outputs.workspaceName.value]"
+    },
+    "hostPoolName": {
+      "type": "string",
+      "value": "[reference('avd').outputs.hostPoolName.value]"
+    },
+    "storageAccountName": {
+      "type": "string",
+      "value": "[variables('storageAccountName')]"
+    },
+    "ssoEnabled": {
+      "type": "bool",
+      "value": "[parameters('enableSso')]"
+    },
+    "profilesUncPath": {
+      "type": "string",
+      "value": "[format('\\\\{0}.file.{1}\\{2}', variables('storageAccountName'), environment().suffixes.storage, variables('profilesShareName'))]"
+    },
+    "kaliPrivateIp": {
+      "type": "string",
+      "value": "[coalesce(tryGet(if(parameters('deployKali'), reference('kali'), null()), 'outputs', 'privateIp', 'value'), '')]"
+    }
+  }
+}
